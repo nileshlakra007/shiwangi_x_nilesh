@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { siteConfig } from "@/app/site-config";
 
 type Item = { id: string; title: string; kind: 'image' | 'video'; src: string; poster?: string; blurb?: string };
 type Row = { title: string; items: Item[] };
@@ -226,7 +227,7 @@ function Logo({ size = "md" }: { size?: "md" | "lg" }) {
   const scale = size === "lg" ? "text-3xl md:text-5xl" : "text-2xl";
   return (
     <div className={`font-black tracking-tight ${scale}`}>
-      <span className="text-red-600">S</span><span className="text-white">tream</span><span className="text-red-600">F</span><span className="text-white">lix</span>
+      <span className="text-white">{siteConfig.appName}</span>
     </div>
   );
 }

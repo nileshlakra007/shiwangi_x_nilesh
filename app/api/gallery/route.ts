@@ -16,13 +16,57 @@ const CATEGORY_MAP: Record<string, string> = {
 const SUPPORTED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg']);
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.mov']);
 
-function titleFromFilename(file: string): string {
-  const base = file.replace(path.extname(file), '');
-  return base
-    .replace(/[-_]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+function formatDate(d: Date): string {
+  try {
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return d.toISOString().slice(0, 10);
+  }
+}
+
+function extractDateFromName(name: string): Date | null {
+  const unix = name.match(/(?<!\d)(\d{10})(?!\d)/);
+  if (unix) {
+    const ts = Number(unix[1]);
+    if (!Number.isNaN(ts)) {
+      const dt = new Date(ts * 1000);
+      if (dt.getFullYear() > 2005) return dt;
+    }
+  }
+  const ymd = name.match(/(?<!\d)(\d{4})[-_\.]?(\d{2})[-_\.]?(\d{2})(?!\d)/);
+  if (ymd) {
+    const [_, y, m, d] = ymd;
+    const dt = new Date(Number(y), Number(m) - 1, Number(d));
+    if (!isNaN(dt.getTime())) return dt;
+  }
+  const dmy = name.match(/(?<!\d)(\d{2})[-_\.]?(\d{2})[-_\.]?(\d{4})(?!\d)/);
+  if (dmy) {
+    const [_, d, m, y] = dmy;
+    const dt = new Date(Number(y), Number(m) - 1, Number(d));
+    if (!isNaN(dt.getTime())) return dt;
+  }
+  return null;
+}
+
+function cleanBaseName(base: string): string {
+  // remove common camera/app prefixes
+  base = base.replace(/^(IMG|VID|PXL|Snapchat|WhatsApp|WA|DSC|PHOTO|VIDEO)[-_\s]*/i, '');
+  base = base.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!base) return '';
+  return base.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function deriveTitleFromFile(filename: string, absPath: string): string {
+  const base = filename.replace(path.extname(filename), '');
+  const fromName = extractDateFromName(base);
+  if (fromName) return formatDate(fromName);
+  try {
+    const stat = fs.statSync(absPath);
+    const dt = stat.birthtime || stat.mtime;
+    if (dt && !isNaN(dt.getTime())) return formatDate(dt);
+  } catch {}
+  const cleaned = cleanBaseName(base);
+  return cleaned || 'Untitled';
 }
 
 export async function GET() {
@@ -91,7 +135,8 @@ export async function GET() {
           })
           .map((f, i) => {
             const m = meta[f] || meta[f.replace(path.extname(f), '')] || {};
-            const title = m.title || titleFromFilename(f);
+            const abs = path.join(categoryDir, f);
+            const title = m.title || deriveTitleFromFile(f, abs);
             const blurb = m.blurb;
             const ext = path.extname(f).toLowerCase();
             if (VIDEO_EXTENSIONS.has(ext)) {
