@@ -210,7 +210,6 @@ export default function NetflixBirthday() {
 
       <footer className="mt-20 px-6 md:px-10 py-16 text-white/50 text-xs md:text-sm grid gap-2">
         <p>Made with popcorn by Nilesh · Not affiliated with Netflix.</p>
-        <p>Tip: Add your photos to /public/shiwangi and swap image URLs for a perfect binge.</p>
       </footer>
 
       {selected && (
