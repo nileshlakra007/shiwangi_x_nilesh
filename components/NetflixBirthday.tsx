@@ -39,6 +39,7 @@ export default function NetflixBirthday() {
   const [hero, setHero] = useState<Hero | undefined>(undefined);
   const [loadedFromGallery, setLoadedFromGallery] = useState(false);
   const [selected, setSelected] = useState<Selected>(null);
+  const [intro, setIntro] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +93,7 @@ export default function NetflixBirthday() {
             {profiles.map((name) => (
               <button
                 key={name}
-                onClick={() => { setCurrentProfile(name); setSplash(true); setTimeout(() => setProfilePicked(true), 1100); }}
+                onClick={() => { setCurrentProfile(name); setSplash(true); setTimeout(() => setProfilePicked(true), 1100); setTimeout(() => setIntro(true), 1150); setTimeout(() => setIntro(false), 2300); }}
                 className="group focus:outline-none"
               >
                 <div className="w-28 h-28 md:w-44 md:h-44 rounded overflow-hidden bg-white/5 ring-2 ring-transparent group-hover:ring-white/80 transition duration-200">
@@ -110,7 +111,7 @@ export default function NetflixBirthday() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      <nav className="fixed top-0 left-0 right-0 z-40 flex items-center gap-6 px-6 md:px-10 py-4 bg-gradient-to-b from-black/90 to-black/0">
+      <nav className={`fixed top-0 left-0 right-0 z-40 flex items-center gap-6 px-6 md:px-10 py-4 bg-gradient-to-b from-black/90 to-black/0 ${intro ? 'lift-in' : ''}`}>
         <Logo />
         <a className="text-sm md:text-base text-white hover:opacity-90" href="#">Home</a>
         <a className="text-sm md:text-base text-white/80 hover:text-white" href="#moments">Moments</a>
@@ -132,7 +133,7 @@ export default function NetflixBirthday() {
         </div>
       </nav>
 
-      <header className="relative h-[72vh] md:h-[78vh] w-full overflow-hidden">
+      <header className={`relative h-[72vh] md:h-[78vh] w-full overflow-hidden ${intro ? 'overlay-zoom' : ''}`}>
         {hero?.type === 'video' ? (
           <video
             className={`absolute inset-0 h-full w-full object-${hero.fit || 'cover'}`}
@@ -165,7 +166,7 @@ export default function NetflixBirthday() {
         </div>
       </header>
 
-      <main className="relative z-10 -mt-20 md:-mt-24">
+      <main className={`relative z-10 -mt-20 md:-mt-24 ${intro ? 'lift-in' : ''}`}>
         <Section id="moments" title="Because every frame is a feeling">
           {rows.slice(0, 1).map((row) => (
             <Row key={row.title} title={row.title}>

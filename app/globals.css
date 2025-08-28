@@ -11,3 +11,16 @@ html, body, :root {
   scrollbar-width: thin;
 }
 
+/* Simple entrance and overlay animations */
+@keyframes zoomFade {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+.overlay-zoom { animation: zoomFade 500ms ease-out both; }
+
+@keyframes liftIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.lift-in { animation: liftIn 600ms ease-out both; }
+

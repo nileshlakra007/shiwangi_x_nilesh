@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 type Item = { id: string; title: string; kind: 'image' | 'video'; src: string; poster?: string; blurb?: string };
 type Row = { title: string; items: Item[] };
 type Hero = { type: 'image' | 'video'; src: string; poster?: string; fit?: 'cover' | 'contain' };
@@ -25,25 +28,38 @@ function formatDate(d: Date): string {
 }
 
 function extractDateFromName(name: string): Date | null {
-  const unix = name.match(/(?<!\d)(\d{10})(?!\d)/);
-  if (unix) {
-    const ts = Number(unix[1]);
-    if (!Number.isNaN(ts)) {
-      const dt = new Date(ts * 1000);
-      if (dt.getFullYear() > 2005) return dt;
-    }
-  }
+  const nowMs = Date.now();
+  const weekMs = 7 * 24 * 60 * 60 * 1000;
+  const upperBound = nowMs + weekMs; // allow slight future skew
+  const lowerBound = Date.UTC(2008, 0, 1); // ignore ancient timestamps
+
+  // Prefer explicit date-like patterns first
   const ymd = name.match(/(?<!\d)(\d{4})[-_\.]?(\d{2})[-_\.]?(\d{2})(?!\d)/);
   if (ymd) {
     const [_, y, m, d] = ymd;
-    const dt = new Date(Number(y), Number(m) - 1, Number(d));
-    if (!isNaN(dt.getTime())) return dt;
+    const yy = Number(y), mm = Number(m), dd = Number(d);
+    if (yy >= 2008 && yy <= 2100) {
+      const dt = new Date(yy, mm - 1, dd);
+      if (!isNaN(dt.getTime())) return dt;
+    }
   }
   const dmy = name.match(/(?<!\d)(\d{2})[-_\.]?(\d{2})[-_\.]?(\d{4})(?!\d)/);
   if (dmy) {
     const [_, d, m, y] = dmy;
-    const dt = new Date(Number(y), Number(m) - 1, Number(d));
-    if (!isNaN(dt.getTime())) return dt;
+    const yy = Number(y), mm = Number(m), dd = Number(d);
+    if (yy >= 2008 && yy <= 2100) {
+      const dt = new Date(yy, mm - 1, dd);
+      if (!isNaN(dt.getTime())) return dt;
+    }
+  }
+
+  // Only accept 10-digit Unix timestamps if they are realistic (not far future/past)
+  const unix = name.match(/(?<!\d)(\d{10})(?!\d)/);
+  if (unix) {
+    const ts = Number(unix[1]) * 1000;
+    if (!Number.isNaN(ts) && ts >= lowerBound && ts <= upperBound) {
+      return new Date(ts);
+    }
   }
   return null;
 }
@@ -67,6 +83,18 @@ function deriveTitleFromFile(filename: string, absPath: string): string {
   } catch {}
   const cleaned = cleanBaseName(base);
   return cleaned || 'Untitled';
+}
+
+function deriveDateMsFromFile(filename: string, absPath: string): number {
+  const base = filename.replace(path.extname(filename), '');
+  const fromName = extractDateFromName(base);
+  if (fromName) return fromName.getTime();
+  try {
+    const stat = fs.statSync(absPath);
+    const ms = Number(stat.birthtimeMs || stat.mtimeMs || stat.ctimeMs);
+    if (!Number.isNaN(ms)) return ms;
+  } catch {}
+  return 0;
 }
 
 export async function GET() {
@@ -117,12 +145,12 @@ export async function GET() {
         const files = fs.existsSync(categoryDir) ? fs.readdirSync(categoryDir) : [];
 
         // optional metadata file to override title/blurb per image
-        let meta: Record<string, { title?: string; blurb?: string }> = {};
+        let meta: Record<string, { title?: string; blurb?: string; date?: string }> = {};
         const metaPath = path.join(categoryDir, 'meta.json');
         if (fs.existsSync(metaPath)) {
           try {
             const raw = fs.readFileSync(metaPath, 'utf-8');
-            meta = JSON.parse(raw) as Record<string, { title?: string; blurb?: string }>;
+            meta = JSON.parse(raw) as Record<string, { title?: string; blurb?: string; date?: string }>;
           } catch {
             // ignore malformed meta
           }
@@ -134,9 +162,40 @@ export async function GET() {
             return SUPPORTED_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
           })
           .map((f, i) => {
-            const m = meta[f] || meta[f.replace(path.extname(f), '')] || {};
+            const keyBase = f.replace(path.extname(f), '');
+            const m = meta[f] || meta[keyBase] || {};
             const abs = path.join(categoryDir, f);
-            const title = m.title || deriveTitleFromFile(f, abs);
+            const overrideDateMs = m.date ? (() => {
+              const s = m.date.trim();
+              // Try ISO first
+              const iso = new Date(s);
+              if (!isNaN(iso.getTime())) return iso.getTime();
+              // yyyyMMdd
+              const ymdCompact = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+              if (ymdCompact) {
+                const [_, y, mm, dd] = ymdCompact;
+                const dt = new Date(Number(y), Number(mm) - 1, Number(dd));
+                if (!isNaN(dt.getTime())) return dt.getTime();
+              }
+              // dd-MM-yyyy or dd/MM/yyyy
+              const dmy = s.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
+              if (dmy) {
+                const [_, dd, mm, y] = dmy;
+                const dt = new Date(Number(y), Number(mm) - 1, Number(dd));
+                if (!isNaN(dt.getTime())) return dt.getTime();
+              }
+              // yyyy-MM-dd or yyyy/MM/dd
+              const ymd = s.match(/^(\d{4})[\/-](\d{2})[\/-](\d{2})$/);
+              if (ymd) {
+                const [_, y, mm, dd] = ymd;
+                const dt = new Date(Number(y), Number(mm) - 1, Number(dd));
+                if (!isNaN(dt.getTime())) return dt.getTime();
+              }
+              return NaN;
+            })() : NaN;
+            const dateMs = Number.isFinite(overrideDateMs) ? overrideDateMs : deriveDateMsFromFile(f, abs);
+            // Prefer showing the date as the visible title if we have one
+            const title = dateMs ? formatDate(new Date(dateMs)) : (m.title || deriveTitleFromFile(f, abs));
             const blurb = m.blurb;
             const ext = path.extname(f).toLowerCase();
             if (VIDEO_EXTENSIONS.has(ext)) {
@@ -152,6 +211,7 @@ export async function GET() {
                 src: `/gallery/${key}/${encodeURIComponent(f)}`,
                 poster,
                 blurb,
+                dateMs,
               };
             }
             return {
@@ -160,8 +220,10 @@ export async function GET() {
               kind: 'image' as const,
               src: `/gallery/${key}/${encodeURIComponent(f)}`,
               blurb,
+              dateMs,
             };
-          });
+          })
+          .sort((a, b) => (b.dateMs ?? 0) - (a.dateMs ?? 0));
       } catch {
         items = [];
       }
