@@ -2,14 +2,12 @@
 
 import React, { useState, useEffect, useRef } from "react";
 
-export default function NetflixBirthday() {
-  const celebrantName = "Shiwangi";
-  const [profilePicked, setProfilePicked] = useState(false);
-  const [currentProfile, setCurrentProfile] = useState<string | null>(null);
-  const [splash, setSplash] = useState(false);
-  const splashAudioRef = useRef<HTMLAudioElement | null>(null);
+type Item = { id: string; title: string; img: string; blurb?: string };
+type Row = { title: string; items: Item[] };
+type Hero = { type: 'image' | 'video'; src: string; poster?: string; fit?: 'cover' | 'contain' };
 
-  const rows: Array<{ title: string; items: { id: string; title: string; img: string; blurb?: string }[] }> = [
+function buildPlaceholderRows(): Row[] {
+  return [
     {
       title: "Top Moments • Director's Cut",
       items: Array.from({ length: 14 }).map((_, i) => ({ id: `top-${i}`, title: `Scene ${i + 1}`.toUpperCase(), img: `https://picsum.photos/seed/top${i}/960/540`, blurb: "A frame we keep rewatching." }))
@@ -27,6 +25,41 @@ export default function NetflixBirthday() {
       items: Array.from({ length: 12 }).map((_, i) => ({ id: `joke-${i}`, title: `Episode ${i + 1}`.toUpperCase(), img: `https://picsum.photos/seed/joke${i}/960/540`, blurb: "Pauses for laughter." }))
     }
   ];
+}
+
+export default function NetflixBirthday() {
+  const celebrantName = "Shiwangi";
+  const [profilePicked, setProfilePicked] = useState(false);
+  const [currentProfile, setCurrentProfile] = useState<string | null>(null);
+  const [splash, setSplash] = useState(false);
+  const splashAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [rows, setRows] = useState<Row[]>(buildPlaceholderRows());
+  const [hero, setHero] = useState<Hero | undefined>(undefined);
+  const [loadedFromGallery, setLoadedFromGallery] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadGallery() {
+      try {
+        const res = await fetch('/api/gallery', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = (await res.json()) as { rows?: Row[]; hero?: Hero };
+        const incoming = Array.isArray(data.rows) ? data.rows : [];
+        const hasAny = incoming.some(r => Array.isArray(r.items) && r.items.length > 0);
+        if (!cancelled && hasAny) {
+          setRows(incoming);
+          setLoadedFromGallery(true);
+        }
+        if (!cancelled && data.hero) {
+          setHero(data.hero);
+        }
+      } catch {
+        // keep placeholders on error
+      }
+    }
+    loadGallery();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!splash) return;
@@ -97,11 +130,27 @@ export default function NetflixBirthday() {
       </nav>
 
       <header className="relative h-[72vh] md:h-[78vh] w-full overflow-hidden">
-        <img src="https://picsum.photos/seed/heroMem/1920/1080" alt="Featured Memory" className="absolute inset-0 h-full w-full object-cover" />
+        {hero?.type === 'video' ? (
+          <video
+            className={`absolute inset-0 h-full w-full object-${hero.fit || 'cover'}`}
+            src={hero.src}
+            poster={hero.poster}
+            autoPlay
+            muted
+            loop
+            playsInline
+          />
+        ) : (
+          <img
+            src={hero?.src || (rows[0]?.items?.[0]?.img) || "https://picsum.photos/seed/heroMem/1920/1080"}
+            alt="Featured Memory"
+            className={`absolute inset-0 h-full w-full object-${hero?.fit || 'cover'}`}
+          />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
         <div className="relative z-10 max-w-7xl pt-28 md:pt-40 px-6 md:px-10">
           <div className="flex items-center gap-3 mb-3">
-            <span className="inline-block rounded bg-red-600 px-2 py-0.5 text-[10px] md:text-xs font-bold">MEMORIES</span>
+            <span className="inline-block rounded bg-red-600 px-2 py-0.5 text-[10px] md:text-xs font-bold">{loadedFromGallery ? 'GALLERY' : 'MEMORIES'}</span>
             <span className="text-white/70 text-[10px] md:text-xs">A Nilesh × {celebrantName} Original</span>
           </div>
           <h1 className="text-4xl md:text-6xl font-black tracking-tight leading-[1.05]">The Story of Us</h1>
