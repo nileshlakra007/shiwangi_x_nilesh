@@ -255,15 +255,28 @@ function Row({ title, children }: { title: string; children: React.ReactNode }) 
 
 function Card({ item, onSelect }: { item: Item; onSelect: (item: Item) => void }) {
   const vidRef = useRef<HTMLVideoElement | null>(null);
+  const hoverTimerRef = useRef<number | null>(null);
+  const HOVER_DELAY_MS = 450;
+
+  function clearHoverTimer() {
+    if (hoverTimerRef.current !== null) {
+      window.clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+  }
   function handleEnter() {
-    if (item.kind === 'video' && vidRef.current) {
+    if (item.kind !== 'video' || !vidRef.current) return;
+    clearHoverTimer();
+    hoverTimerRef.current = window.setTimeout(() => {
       try {
+        if (!vidRef.current) return;
         vidRef.current.currentTime = 0;
         vidRef.current.play().catch(() => {});
       } catch {}
-    }
+    }, HOVER_DELAY_MS);
   }
   function handleLeave() {
+    clearHoverTimer();
     if (item.kind === 'video' && vidRef.current) {
       try {
         vidRef.current.pause();
@@ -273,7 +286,7 @@ function Card({ item, onSelect }: { item: Item; onSelect: (item: Item) => void }
   }
   return (
     <div
-      className="group relative w-[200px] md:w-[260px] flex-shrink-0 snap-start"
+      className="group relative w-[200px] md:w-[260px] flex-shrink-0 snap-start transition-transform duration-200 ease-out hover:scale-[1.12] hover:translate-y-[-8px] hover:z-20"
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
       onClick={() => onSelect(item)}
