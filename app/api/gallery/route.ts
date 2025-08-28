@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
-type Item = { id: string; title: string; img: string; blurb?: string };
+type Item = { id: string; title: string; kind: 'image' | 'video'; src: string; poster?: string; blurb?: string };
 type Row = { title: string; items: Item[] };
 type Hero = { type: 'image' | 'video'; src: string; poster?: string; fit?: 'cover' | 'contain' };
 
@@ -85,15 +85,35 @@ export async function GET() {
         }
 
         items = files
-          .filter((f) => SUPPORTED_EXTENSIONS.has(path.extname(f).toLowerCase()))
+          .filter((f) => {
+            const ext = path.extname(f).toLowerCase();
+            return SUPPORTED_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
+          })
           .map((f, i) => {
             const m = meta[f] || meta[f.replace(path.extname(f), '')] || {};
             const title = m.title || titleFromFilename(f);
             const blurb = m.blurb;
+            const ext = path.extname(f).toLowerCase();
+            if (VIDEO_EXTENSIONS.has(ext)) {
+              const base = f.replace(ext, '');
+              const posterName = ['.jpg', '.jpeg', '.png', '.webp']
+                .map((e) => `${base}${e}`)
+                .find((name) => files.includes(name));
+              const poster = posterName ? `/gallery/${key}/${encodeURIComponent(posterName)}` : undefined;
+              return {
+                id: `${key}-${i}`,
+                title,
+                kind: 'video' as const,
+                src: `/gallery/${key}/${encodeURIComponent(f)}`,
+                poster,
+                blurb,
+              };
+            }
             return {
               id: `${key}-${i}`,
               title,
-              img: `/gallery/${key}/${encodeURIComponent(f)}`,
+              kind: 'image' as const,
+              src: `/gallery/${key}/${encodeURIComponent(f)}`,
               blurb,
             };
           });

@@ -2,27 +2,28 @@
 
 import React, { useState, useEffect, useRef } from "react";
 
-type Item = { id: string; title: string; img: string; blurb?: string };
+type Item = { id: string; title: string; kind: 'image' | 'video'; src: string; poster?: string; blurb?: string };
 type Row = { title: string; items: Item[] };
 type Hero = { type: 'image' | 'video'; src: string; poster?: string; fit?: 'cover' | 'contain' };
+type Selected = { item: Item; rowTitle: string } | null;
 
 function buildPlaceholderRows(): Row[] {
   return [
     {
       title: "Top Moments • Director's Cut",
-      items: Array.from({ length: 14 }).map((_, i) => ({ id: `top-${i}`, title: `Scene ${i + 1}`.toUpperCase(), img: `https://picsum.photos/seed/top${i}/960/540`, blurb: "A frame we keep rewatching." }))
+      items: Array.from({ length: 14 }).map((_, i) => ({ id: `top-${i}`, title: `Scene ${i + 1}`.toUpperCase(), kind: 'image' as const, src: `https://picsum.photos/seed/top${i}/960/540`, blurb: "A frame we keep rewatching." }))
     },
     {
       title: "Trips & Adventures",
-      items: Array.from({ length: 16 }).map((_, i) => ({ id: `trip-${i}`, title: `Stop ${i + 1}`.toUpperCase(), img: `https://picsum.photos/seed/trip${i}/960/540`, blurb: "Snacks + sunsets." }))
+      items: Array.from({ length: 16 }).map((_, i) => ({ id: `trip-${i}`, title: `Stop ${i + 1}`.toUpperCase(), kind: 'image' as const, src: `https://picsum.photos/seed/trip${i}/960/540`, blurb: "Snacks + sunsets." }))
     },
     {
       title: "Food & Coffee Stories",
-      items: Array.from({ length: 12 }).map((_, i) => ({ id: `food-${i}`, title: `Bite ${i + 1}`.toUpperCase(), img: `https://picsum.photos/seed/food${i}/960/540`, blurb: "Taste test: us." }))
+      items: Array.from({ length: 12 }).map((_, i) => ({ id: `food-${i}`, title: `Bite ${i + 1}`.toUpperCase(), kind: 'image' as const, src: `https://picsum.photos/seed/food${i}/960/540`, blurb: "Taste test: us." }))
     },
     {
       title: "Inside Jokes Playlist",
-      items: Array.from({ length: 12 }).map((_, i) => ({ id: `joke-${i}`, title: `Episode ${i + 1}`.toUpperCase(), img: `https://picsum.photos/seed/joke${i}/960/540`, blurb: "Pauses for laughter." }))
+      items: Array.from({ length: 12 }).map((_, i) => ({ id: `joke-${i}`, title: `Episode ${i + 1}`.toUpperCase(), kind: 'image' as const, src: `https://picsum.photos/seed/joke${i}/960/540`, blurb: "Pauses for laughter." }))
     }
   ];
 }
@@ -36,6 +37,7 @@ export default function NetflixBirthday() {
   const [rows, setRows] = useState<Row[]>(buildPlaceholderRows());
   const [hero, setHero] = useState<Hero | undefined>(undefined);
   const [loadedFromGallery, setLoadedFromGallery] = useState(false);
+  const [selected, setSelected] = useState<Selected>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,7 +144,7 @@ export default function NetflixBirthday() {
           />
         ) : (
           <img
-            src={hero?.src || (rows[0]?.items?.[0]?.img) || "https://picsum.photos/seed/heroMem/1920/1080"}
+            src={hero?.src || (rows[0]?.items?.[0]?.src) || "https://picsum.photos/seed/heroMem/1920/1080"}
             alt="Featured Memory"
             className={`absolute inset-0 h-full w-full object-${hero?.fit || 'cover'}`}
           />
@@ -167,7 +169,7 @@ export default function NetflixBirthday() {
           {rows.slice(0, 1).map((row) => (
             <Row key={row.title} title={row.title}>
               {row.items.map((it) => (
-                <Card key={it.id} title={it.title} img={it.img} blurb={it.blurb} />
+                <Card key={it.id} item={it} onSelect={(item) => setSelected({ item, rowTitle: row.title })} />
               ))}
             </Row>
           ))}
@@ -177,7 +179,7 @@ export default function NetflixBirthday() {
           {rows.slice(1, 2).map((row) => (
             <Row key={row.title} title={row.title}>
               {row.items.map((it) => (
-                <Card key={it.id} title={it.title} img={it.img} blurb={it.blurb} />
+                <Card key={it.id} item={it} onSelect={(item) => setSelected({ item, rowTitle: row.title })} />
               ))}
             </Row>
           ))}
@@ -187,7 +189,7 @@ export default function NetflixBirthday() {
           {rows.slice(2, 3).map((row) => (
             <Row key={row.title} title={row.title}>
               {row.items.map((it) => (
-                <Card key={it.id} title={it.title} img={it.img} blurb={it.blurb} />
+                <Card key={it.id} item={it} onSelect={(item) => setSelected({ item, rowTitle: row.title })} />
               ))}
             </Row>
           ))}
@@ -197,7 +199,7 @@ export default function NetflixBirthday() {
           {rows.slice(3, 4).map((row) => (
             <Row key={row.title} title={row.title}>
               {row.items.map((it) => (
-                <Card key={it.id} title={it.title} img={it.img} blurb={it.blurb} />
+                <Card key={it.id} item={it} onSelect={(item) => setSelected({ item, rowTitle: row.title })} />
               ))}
             </Row>
           ))}
@@ -208,6 +210,14 @@ export default function NetflixBirthday() {
         <p>Made with popcorn by Nilesh · Not affiliated with Netflix.</p>
         <p>Tip: Add your photos to /public/shiwangi and swap image URLs for a perfect binge.</p>
       </footer>
+
+      {selected && (
+        <DetailModal
+          item={selected.item}
+          rowTitle={selected.rowTitle}
+          onClose={() => setSelected(null)}
+        />)
+      }
     </div>
   );
 }
@@ -243,15 +253,95 @@ function Row({ title, children }: { title: string; children: React.ReactNode }) 
   );
 }
 
-function Card({ title, img, blurb }: { title: string; img: string; blurb?: string }) {
+function Card({ item, onSelect }: { item: Item; onSelect: (item: Item) => void }) {
+  const vidRef = useRef<HTMLVideoElement | null>(null);
+  function handleEnter() {
+    if (item.kind === 'video' && vidRef.current) {
+      try {
+        vidRef.current.currentTime = 0;
+        vidRef.current.play().catch(() => {});
+      } catch {}
+    }
+  }
+  function handleLeave() {
+    if (item.kind === 'video' && vidRef.current) {
+      try {
+        vidRef.current.pause();
+        vidRef.current.currentTime = 0;
+      } catch {}
+    }
+  }
   return (
-    <div className="group relative w-[200px] md:w-[260px] flex-shrink-0 snap-start">
+    <div
+      className="group relative w-[200px] md:w-[260px] flex-shrink-0 snap-start"
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+      onClick={() => onSelect(item)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(item); }}
+    >
       <div className="rounded-md overflow-hidden bg-white/5 border border-white/10">
-        <img src={img} alt={title} className="h-[112px] md:h-[146px] w-full object-cover group-hover:scale-105 transition duration-300" />
+        {item.kind === 'video' ? (
+          <video
+            ref={vidRef}
+            src={item.src}
+            poster={item.poster}
+            muted
+            playsInline
+            loop
+            className="h-[112px] md:h-[146px] w-full object-cover group-hover:scale-105 transition duration-300"
+          />
+        ) : (
+          <img src={item.src} alt={item.title} className="h-[112px] md:h-[146px] w-full object-cover group-hover:scale-105 transition duration-300" />
+        )}
       </div>
       <div className="mt-2">
-        <div className="text-[11px] md:text-sm font-semibold leading-tight line-clamp-1">{title}</div>
-        {blurb && <div className="text-[10px] md:text-xs text-white/60 line-clamp-2">{blurb}</div>}
+        <div className="text-[11px] md:text-sm font-semibold leading-tight line-clamp-1">{item.title}</div>
+        {item.blurb && <div className="text-[10px] md:text-xs text-white/60 line-clamp-2">{item.blurb}</div>}
+      </div>
+    </div>
+  );
+}
+
+function DetailModal({ item, rowTitle, onClose }: { item: Item; rowTitle: string; onClose: () => void }) {
+  useEffect(() => {
+    const original = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = original; };
+  }, []);
+  return (
+    <div className="fixed inset-0 z-[200]">
+      <div className="absolute inset-0 bg-black/80" onClick={onClose} />
+      <div className="absolute inset-0 grid place-items-center px-4">
+        <div className="w-full max-w-4xl">
+          <div className="relative w-full overflow-hidden rounded-lg bg-black">
+            {item.kind === 'video' ? (
+              <video
+                src={item.src}
+                poster={item.poster}
+                autoPlay
+                controls
+                playsInline
+                className="w-full h-[50vh] md:h-[60vh] object-contain bg-black"
+              />
+            ) : (
+              <img src={item.src} alt={item.title} className="w-full h-[50vh] md:h-[60vh] object-contain bg-black" />
+            )}
+            <button
+              onClick={onClose}
+              className="absolute top-3 right-3 bg-white/10 hover:bg-white/20 text-white rounded-full w-9 h-9 grid place-items-center"
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>
+          <div className="bg-zinc-900 text-white p-4 rounded-b-lg space-y-1">
+            <div className="text-sm text-white/60">{rowTitle}</div>
+            <div className="text-xl md:text-2xl font-bold">{item.title}</div>
+            {item.blurb && <div className="text-white/80 text-sm md:text-base">{item.blurb}</div>}
+          </div>
+        </div>
       </div>
     </div>
   );
