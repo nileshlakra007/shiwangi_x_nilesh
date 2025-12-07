@@ -172,7 +172,7 @@ export default function NetflixBirthday() {
           />
         ) : (
           <img
-            src={hero?.src || (rows[0]?.items?.[0]?.src) || "https://picsum.photos/seed/heroMem/1920/1080"}
+            src={hero?.src || (rows[0]?.items?.[0]?.items?.[0]?.src) || "https://picsum.photos/seed/heroMem/1920/1080"}
             alt="Featured Memory"
             className={`absolute inset-0 h-full w-full object-${hero?.fit || 'cover'}`}
           />
