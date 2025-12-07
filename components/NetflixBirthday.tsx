@@ -422,7 +422,7 @@ function DetailModal({ group, startIndex, rowTitle, onClose }: { group: GroupedI
       <div className="absolute inset-0 bg-black/80" onClick={onClose} />
       <div className="absolute inset-0 grid place-items-center px-4">
         <div className="w-full max-w-4xl" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-          <div className="relative w-full overflow-hidden rounded-lg bg-black">
+          <div className="relative w-full overflow-hidden rounded-lg bg-black h-[55vh] md:h-[65vh]">
             {group.items.map((media, idx) => (
               <div
                 key={media.id}
