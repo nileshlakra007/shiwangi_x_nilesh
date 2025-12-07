@@ -1,30 +1,56 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { siteConfig } from "@/app/site-config";
 
-type Item = { id: string; title: string; kind: 'image' | 'video'; src: string; poster?: string; blurb?: string };
-type Row = { title: string; items: Item[] };
+type Media = { id: string; title: string; kind: 'image' | 'video'; src: string; poster?: string; blurb?: string };
+type GroupedItem = { id: string; dateLabel: string; blurb?: string; items: Media[] };
+type Row = { title: string; items: GroupedItem[] };
 type Hero = { type: 'image' | 'video'; src: string; poster?: string; fit?: 'cover' | 'contain' };
-type Selected = { item: Item; rowTitle: string } | null;
+type Selected = { item: Media; rowTitle: string; dateLabel: string } | null;
 
 function buildPlaceholderRows(): Row[] {
   return [
     {
       title: "Top Moments • Director's Cut",
-      items: Array.from({ length: 14 }).map((_, i) => ({ id: `top-${i}`, title: `Scene ${i + 1}`.toUpperCase(), kind: 'image' as const, src: `https://picsum.photos/seed/top${i}/960/540`, blurb: "A frame we keep rewatching." }))
+      items: Array.from({ length: 7 }).map((_, i) => ({
+        id: `top-${i}`,
+        dateLabel: `May ${i + 1}, 2025`,
+        items: [
+          { id: `top-${i}-a`, title: `Scene ${i + 1}`.toUpperCase(), kind: 'image' as const, src: `https://picsum.photos/seed/top${i}a/960/540`, blurb: "A frame we keep rewatching." },
+          { id: `top-${i}-b`, title: `Scene ${i + 1}B`.toUpperCase(), kind: 'image' as const, src: `https://picsum.photos/seed/top${i}b/960/540`, blurb: "Second take." }
+        ]
+      }))
     },
     {
       title: "Trips & Adventures",
-      items: Array.from({ length: 16 }).map((_, i) => ({ id: `trip-${i}`, title: `Stop ${i + 1}`.toUpperCase(), kind: 'image' as const, src: `https://picsum.photos/seed/trip${i}/960/540`, blurb: "Snacks + sunsets." }))
+      items: Array.from({ length: 6 }).map((_, i) => ({
+        id: `trip-${i}`,
+        dateLabel: `June ${i + 2}, 2025`,
+        items: [
+          { id: `trip-${i}-a`, title: `Stop ${i + 1}`.toUpperCase(), kind: 'image' as const, src: `https://picsum.photos/seed/trip${i}/960/540`, blurb: "Snacks + sunsets." }
+        ]
+      }))
     },
     {
       title: "Food & Coffee Stories",
-      items: Array.from({ length: 12 }).map((_, i) => ({ id: `food-${i}`, title: `Bite ${i + 1}`.toUpperCase(), kind: 'image' as const, src: `https://picsum.photos/seed/food${i}/960/540`, blurb: "Taste test: us." }))
+      items: Array.from({ length: 5 }).map((_, i) => ({
+        id: `food-${i}`,
+        dateLabel: `July ${i + 3}, 2025`,
+        items: [
+          { id: `food-${i}-a`, title: `Bite ${i + 1}`.toUpperCase(), kind: 'image' as const, src: `https://picsum.photos/seed/food${i}/960/540`, blurb: "Taste test: us." }
+        ]
+      }))
     },
     {
       title: "Inside Jokes Playlist",
-      items: Array.from({ length: 12 }).map((_, i) => ({ id: `joke-${i}`, title: `Episode ${i + 1}`.toUpperCase(), kind: 'image' as const, src: `https://picsum.photos/seed/joke${i}/960/540`, blurb: "Pauses for laughter." }))
+      items: Array.from({ length: 5 }).map((_, i) => ({
+        id: `joke-${i}`,
+        dateLabel: `August ${i + 4}, 2025`,
+        items: [
+          { id: `joke-${i}-a`, title: `Episode ${i + 1}`.toUpperCase(), kind: 'image' as const, src: `https://picsum.photos/seed/joke${i}/960/540`, blurb: "Pauses for laughter." }
+        ]
+      }))
     }
   ];
 }
@@ -170,8 +196,8 @@ export default function NetflixBirthday() {
         <Section id="moments" title="Because every frame is a feeling">
           {rows.slice(0, 1).map((row) => (
             <Row key={row.title} title={row.title}>
-              {row.items.map((it) => (
-                <Card key={it.id} item={it} onSelect={(item) => setSelected({ item, rowTitle: row.title })} />
+              {row.items.map((group) => (
+                <Card key={group.id} group={group} onSelect={(item) => setSelected({ item, rowTitle: row.title, dateLabel: group.dateLabel })} />
               ))}
             </Row>
           ))}
@@ -180,8 +206,8 @@ export default function NetflixBirthday() {
         <Section id="trips" title="Trips & Adventures">
           {rows.slice(1, 2).map((row) => (
             <Row key={row.title} title={row.title}>
-              {row.items.map((it) => (
-                <Card key={it.id} item={it} onSelect={(item) => setSelected({ item, rowTitle: row.title })} />
+              {row.items.map((group) => (
+                <Card key={group.id} group={group} onSelect={(item) => setSelected({ item, rowTitle: row.title, dateLabel: group.dateLabel })} />
               ))}
             </Row>
           ))}
@@ -190,8 +216,8 @@ export default function NetflixBirthday() {
         <Section id="food" title="Food & Coffee Stories">
           {rows.slice(2, 3).map((row) => (
             <Row key={row.title} title={row.title}>
-              {row.items.map((it) => (
-                <Card key={it.id} item={it} onSelect={(item) => setSelected({ item, rowTitle: row.title })} />
+              {row.items.map((group) => (
+                <Card key={group.id} group={group} onSelect={(item) => setSelected({ item, rowTitle: row.title, dateLabel: group.dateLabel })} />
               ))}
             </Row>
           ))}
@@ -200,8 +226,8 @@ export default function NetflixBirthday() {
         <Section id="jokes" title="Inside Jokes Playlist">
           {rows.slice(3, 4).map((row) => (
             <Row key={row.title} title={row.title}>
-              {row.items.map((it) => (
-                <Card key={it.id} item={it} onSelect={(item) => setSelected({ item, rowTitle: row.title })} />
+              {row.items.map((group) => (
+                <Card key={group.id} group={group} onSelect={(item) => setSelected({ item, rowTitle: row.title, dateLabel: group.dateLabel })} />
               ))}
             </Row>
           ))}
@@ -216,6 +242,7 @@ export default function NetflixBirthday() {
         <DetailModal
           item={selected.item}
           rowTitle={selected.rowTitle}
+          dateLabel={selected.dateLabel}
           onClose={() => setSelected(null)}
         />)
       }
@@ -254,71 +281,99 @@ function Row({ title, children }: { title: string; children: React.ReactNode }) 
   );
 }
 
-function Card({ item, onSelect }: { item: Item; onSelect: (item: Item) => void }) {
-  const vidRef = useRef<HTMLVideoElement | null>(null);
-  const hoverTimerRef = useRef<number | null>(null);
-  const HOVER_DELAY_MS = 450;
+function Card({ group, onSelect }: { group: GroupedItem; onSelect: (item: Media) => void }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const autoCycleMs = 2800;
+  const slides = group.items;
 
-  function clearHoverTimer() {
-    if (hoverTimerRef.current !== null) {
-      window.clearTimeout(hoverTimerRef.current);
-      hoverTimerRef.current = null;
-    }
+  useEffect(() => {
+    if (slides.length <= 1) return;
+    const timer = window.setInterval(() => {
+      setActiveIndex((prev) => (prev + 1) % slides.length);
+    }, autoCycleMs);
+    return () => window.clearInterval(timer);
+  }, [slides.length]);
+
+  const active = useMemo(() => slides[activeIndex] || slides[0], [slides, activeIndex]);
+
+  function handleSelect() {
+    onSelect(active);
   }
-  function handleEnter() {
-    if (item.kind !== 'video' || !vidRef.current) return;
-    clearHoverTimer();
-    hoverTimerRef.current = window.setTimeout(() => {
-      try {
-        if (!vidRef.current) return;
-        vidRef.current.currentTime = 0;
-        vidRef.current.play().catch(() => {});
-      } catch {}
-    }, HOVER_DELAY_MS);
-  }
-  function handleLeave() {
-    clearHoverTimer();
-    if (item.kind === 'video' && vidRef.current) {
-      try {
-        vidRef.current.pause();
-        vidRef.current.currentTime = 0;
-      } catch {}
-    }
-  }
+
   return (
     <div
       className="group relative w-[200px] md:w-[260px] flex-shrink-0 snap-start transition-transform duration-200 ease-out hover:scale-[1.12] hover:translate-y-[-8px] hover:z-20"
-      onMouseEnter={handleEnter}
-      onMouseLeave={handleLeave}
-      onClick={() => onSelect(item)}
+      onClick={handleSelect}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(item); }}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelect(); }}
     >
-      <div className="rounded-md overflow-hidden bg-white/5 border border-white/10">
-        {item.kind === 'video' ? (
-          <video
-            ref={vidRef}
-            src={item.src}
-            poster={item.poster}
-            muted
-            playsInline
-            loop
-            className="h-[112px] md:h-[146px] w-full object-cover group-hover:scale-105 transition duration-300"
+      <div className="rounded-md overflow-hidden bg-white/5 border border-white/10 relative h-[112px] md:h-[146px]">
+        {slides.map((slide, idx) => (
+          <Slide
+            key={slide.id}
+            item={slide}
+            isActive={idx === activeIndex}
           />
-        ) : (
-          <img src={item.src} alt={item.title} className="h-[112px] md:h-[146px] w-full object-cover group-hover:scale-105 transition duration-300" />
+        ))}
+        {slides.length > 1 && (
+          <div className="absolute bottom-1.5 left-0 right-0 flex justify-center gap-1.5">
+            {slides.map((_, i) => (
+              <span
+                key={i}
+                className={`h-1 w-4 rounded-full transition-all duration-200 ${i === activeIndex ? 'bg-white' : 'bg-white/40'}`}
+              />
+            ))}
+          </div>
         )}
       </div>
       <div className="mt-2">
-        <div className="text-[11px] md:text-sm font-semibold leading-tight line-clamp-1">{item.title}</div>
-        {item.blurb && <div className="text-[10px] md:text-xs text-white/60 line-clamp-2">{item.blurb}</div>}
+        <div className="text-[11px] md:text-sm font-semibold leading-tight line-clamp-1">{group.dateLabel}</div>
+        {active.blurb && <div className="text-[10px] md:text-xs text-white/60 line-clamp-2">{active.blurb}</div>}
+        {slides.length > 1 && <div className="text-[9px] md:text-[10px] text-white/50 mt-0.5">{slides.length} memories</div>}
       </div>
     </div>
   );
 }
 
-function DetailModal({ item, rowTitle, onClose }: { item: Item; rowTitle: string; onClose: () => void }) {
+function Slide({ item, isActive }: { item: Media; isActive: boolean }) {
+  const vidRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    if (item.kind !== 'video' || !vidRef.current) return;
+    if (isActive) {
+      try {
+        vidRef.current.currentTime = 0;
+        vidRef.current.play().catch(() => {});
+      } catch {}
+    } else {
+      try {
+        vidRef.current.pause();
+        vidRef.current.currentTime = 0;
+      } catch {}
+    }
+  }, [isActive, item.kind]);
+
+  return (
+    <div className={`absolute inset-0 transition-opacity duration-500 ease-out ${isActive ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+      {item.kind === 'video' ? (
+        <video
+          ref={vidRef}
+          src={item.src}
+          poster={item.poster}
+          muted
+          playsInline
+          loop
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <img src={item.src} alt={item.title} className="h-full w-full object-cover" />
+      )}
+    </div>
+  );
+}
+
+function DetailModal({ item, rowTitle, dateLabel, onClose }: { item: Media; rowTitle: string; dateLabel: string; onClose: () => void }) {
   useEffect(() => {
     const original = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -352,6 +407,7 @@ function DetailModal({ item, rowTitle, onClose }: { item: Item; rowTitle: string
           </div>
           <div className="bg-zinc-900 text-white p-4 rounded-b-lg space-y-1">
             <div className="text-sm text-white/60">{rowTitle}</div>
+            <div className="text-xs text-white/40">{dateLabel}</div>
             <div className="text-xl md:text-2xl font-bold">{item.title}</div>
             {item.blurb && <div className="text-white/80 text-sm md:text-base">{item.blurb}</div>}
           </div>
@@ -360,5 +416,3 @@ function DetailModal({ item, rowTitle, onClose }: { item: Item; rowTitle: string
     </div>
   );
 }
-
-
