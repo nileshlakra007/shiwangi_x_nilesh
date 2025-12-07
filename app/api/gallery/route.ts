@@ -5,8 +5,9 @@ import path from 'path';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-type Item = { id: string; title: string; kind: 'image' | 'video'; src: string; poster?: string; blurb?: string };
-type Row = { title: string; items: Item[] };
+type MediaItem = { id: string; title: string; kind: 'image' | 'video'; src: string; poster?: string; blurb?: string; dateMs?: number };
+type GroupedItem = { id: string; dateLabel: string; blurb?: string; items: MediaItem[]; dateMs: number };
+type Row = { title: string; items: GroupedItem[] };
 type Hero = { type: 'image' | 'video'; src: string; poster?: string; fit?: 'cover' | 'contain' };
 
 const CATEGORY_MAP: Record<string, string> = {
@@ -18,6 +19,18 @@ const CATEGORY_MAP: Record<string, string> = {
 
 const SUPPORTED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg']);
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.mov']);
+
+function loadMeta(metaPath: string): Record<string, { title?: string; blurb?: string; date?: string }> {
+  try {
+    if (fs.existsSync(metaPath)) {
+      const raw = fs.readFileSync(metaPath, 'utf-8');
+      return JSON.parse(raw) as Record<string, { title?: string; blurb?: string; date?: string }>;
+    }
+  } catch {
+    // ignore malformed meta
+  }
+  return {};
+}
 
 function formatDate(d: Date): string {
   try {
@@ -72,6 +85,33 @@ function cleanBaseName(base: string): string {
   return base.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function parseDateMsFromString(input?: string | null): number {
+  if (!input) return NaN;
+  const s = input.trim();
+  if (!s) return NaN;
+  const iso = new Date(s);
+  if (!isNaN(iso.getTime())) return iso.getTime();
+  const ymdCompact = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (ymdCompact) {
+    const [_, y, mm, dd] = ymdCompact;
+    const dt = new Date(Number(y), Number(mm) - 1, Number(dd));
+    if (!isNaN(dt.getTime())) return dt.getTime();
+  }
+  const dmy = s.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
+  if (dmy) {
+    const [_, dd, mm, y] = dmy;
+    const dt = new Date(Number(y), Number(mm) - 1, Number(dd));
+    if (!isNaN(dt.getTime())) return dt.getTime();
+  }
+  const ymd = s.match(/^(\d{4})[\/-](\d{2})[\/-](\d{2})$/);
+  if (ymd) {
+    const [_, y, mm, dd] = ymd;
+    const dt = new Date(Number(y), Number(mm) - 1, Number(dd));
+    if (!isNaN(dt.getTime())) return dt.getTime();
+  }
+  return NaN;
+}
+
 function deriveTitleFromFile(filename: string, absPath: string): string {
   const base = filename.replace(path.extname(filename), '');
   const fromName = extractDateFromName(base);
@@ -95,6 +135,51 @@ function deriveDateMsFromFile(filename: string, absPath: string): number {
     if (!Number.isNaN(ms)) return ms;
   } catch {}
   return 0;
+}
+
+function makeMediaItems(files: string[], baseDir: string, meta: Record<string, { title?: string; blurb?: string; date?: string }>, categoryKey: string, subfolder?: string): MediaItem[] {
+  const urlPrefix = subfolder ? `/gallery/${categoryKey}/${encodeURIComponent(subfolder)}/` : `/gallery/${categoryKey}/`;
+
+  return files
+    .filter((f) => {
+      const ext = path.extname(f).toLowerCase();
+      return SUPPORTED_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
+    })
+    .map((f, i) => {
+      const keyBase = f.replace(path.extname(f), '');
+      const m = meta[f] || meta[keyBase] || {};
+      const abs = path.join(baseDir, f);
+      const overrideDateMs = parseDateMsFromString(m.date);
+      const dateMs = Number.isFinite(overrideDateMs) ? overrideDateMs : deriveDateMsFromFile(f, abs);
+      const title = m.title || deriveTitleFromFile(f, abs);
+      const blurb = m.blurb;
+      const ext = path.extname(f).toLowerCase();
+      if (VIDEO_EXTENSIONS.has(ext)) {
+        const base = f.replace(ext, '');
+        const posterName = ['.jpg', '.jpeg', '.png', '.webp']
+          .map((e) => `${base}${e}`)
+          .find((name) => files.includes(name));
+        const poster = posterName ? `${urlPrefix}${encodeURIComponent(posterName)}` : undefined;
+        return {
+          id: `${categoryKey}-${subfolder || 'root'}-${i}`,
+          title,
+          kind: 'video' as const,
+          src: `${urlPrefix}${encodeURIComponent(f)}`,
+          poster,
+          blurb,
+          dateMs,
+        };
+      }
+      return {
+        id: `${categoryKey}-${subfolder || 'root'}-${i}`,
+        title,
+        kind: 'image' as const,
+        src: `${urlPrefix}${encodeURIComponent(f)}`,
+        blurb,
+        dateMs,
+      };
+    })
+    .sort((a, b) => (b.dateMs ?? 0) - (a.dateMs ?? 0));
 }
 
 export async function GET() {
@@ -140,90 +225,52 @@ export async function GET() {
 
     for (const key of Object.keys(CATEGORY_MAP)) {
       const categoryDir = path.join(publicDir, key);
-      let items: Item[] = [];
+      let items: GroupedItem[] = [];
       try {
-        const files = fs.existsSync(categoryDir) ? fs.readdirSync(categoryDir) : [];
+        const dirents = fs.existsSync(categoryDir) ? fs.readdirSync(categoryDir, { withFileTypes: true }) : [];
+        const hasSubdirs = dirents.some((d) => d.isDirectory());
 
-        // optional metadata file to override title/blurb per image
-        let meta: Record<string, { title?: string; blurb?: string; date?: string }> = {};
-        const metaPath = path.join(categoryDir, 'meta.json');
-        if (fs.existsSync(metaPath)) {
-          try {
-            const raw = fs.readFileSync(metaPath, 'utf-8');
-            meta = JSON.parse(raw) as Record<string, { title?: string; blurb?: string; date?: string }>;
-          } catch {
-            // ignore malformed meta
+        const rootMeta = loadMeta(path.join(categoryDir, 'meta.json'));
+
+        if (hasSubdirs) {
+          const rootFiles = dirents.filter((d) => d.isFile()).map((d) => d.name);
+          const rootMedia = makeMediaItems(rootFiles, categoryDir, rootMeta, key);
+          if (rootMedia.length) {
+            const groupDateMs = rootMedia[0]?.dateMs ?? 0;
+            const groupLabel = rootMedia[0]?.dateMs ? formatDate(new Date(rootMedia[0].dateMs!)) : 'More Memories';
+            items.push({ id: `${key}-group-root`, dateLabel: groupLabel, blurb: rootMedia[0]?.blurb, items: rootMedia, dateMs: groupDateMs });
           }
-        }
 
-        items = files
-          .filter((f) => {
-            const ext = path.extname(f).toLowerCase();
-            return SUPPORTED_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
-          })
-          .map((f, i) => {
-            const keyBase = f.replace(path.extname(f), '');
-            const m = meta[f] || meta[keyBase] || {};
-            const abs = path.join(categoryDir, f);
-            const overrideDateMs = m.date ? (() => {
-              const s = m.date.trim();
-              // Try ISO first
-              const iso = new Date(s);
-              if (!isNaN(iso.getTime())) return iso.getTime();
-              // yyyyMMdd
-              const ymdCompact = s.match(/^(\d{4})(\d{2})(\d{2})$/);
-              if (ymdCompact) {
-                const [_, y, mm, dd] = ymdCompact;
-                const dt = new Date(Number(y), Number(mm) - 1, Number(dd));
-                if (!isNaN(dt.getTime())) return dt.getTime();
+          for (const dirent of dirents) {
+            if (!dirent.isDirectory()) continue;
+            const subdir = path.join(categoryDir, dirent.name);
+            const subFiles = fs.readdirSync(subdir);
+            const subMeta = loadMeta(path.join(subdir, 'meta.json'));
+            const mediaItems = makeMediaItems(subFiles, subdir, subMeta, key, dirent.name);
+            if (!mediaItems.length) continue;
+            const dateFromFolder = extractDateFromName(dirent.name);
+            const folderDateMs = dateFromFolder?.getTime() ?? mediaItems[0]?.dateMs ?? 0;
+            const label = dateFromFolder ? formatDate(dateFromFolder) : (cleanBaseName(dirent.name) || dirent.name);
+            items.push({ id: `${key}-group-${items.length}`, dateLabel: label, blurb: mediaItems[0]?.blurb, items: mediaItems, dateMs: folderDateMs });
+          }
+          items = items.sort((a, b) => (b.dateMs ?? 0) - (a.dateMs ?? 0));
+        } else {
+          const grouped = makeMediaItems(dirents.filter((d) => d.isFile()).map((d) => d.name), categoryDir, rootMeta, key)
+            .reduce((acc, item, idx) => {
+              const dateValue = Number.isFinite(item.dateMs) ? item.dateMs as number : 0;
+              const label = dateValue ? formatDate(new Date(dateValue)) : (item.title || `Memory ${idx + 1}`);
+              const keyLabel = dateValue ? `date-${new Date(dateValue).toISOString().slice(0, 10)}` : `untitled-${label}-${idx}`;
+              if (!acc.has(keyLabel)) {
+                acc.set(keyLabel, { id: `${key}-group-${acc.size}`, dateLabel: label, items: [], blurb: item.blurb, dateMs: dateValue });
               }
-              // dd-MM-yyyy or dd/MM/yyyy
-              const dmy = s.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
-              if (dmy) {
-                const [_, dd, mm, y] = dmy;
-                const dt = new Date(Number(y), Number(mm) - 1, Number(dd));
-                if (!isNaN(dt.getTime())) return dt.getTime();
-              }
-              // yyyy-MM-dd or yyyy/MM/dd
-              const ymd = s.match(/^(\d{4})[\/-](\d{2})[\/-](\d{2})$/);
-              if (ymd) {
-                const [_, y, mm, dd] = ymd;
-                const dt = new Date(Number(y), Number(mm) - 1, Number(dd));
-                if (!isNaN(dt.getTime())) return dt.getTime();
-              }
-              return NaN;
-            })() : NaN;
-            const dateMs = Number.isFinite(overrideDateMs) ? overrideDateMs : deriveDateMsFromFile(f, abs);
-            // Prefer showing the date as the visible title if we have one
-            const title = dateMs ? formatDate(new Date(dateMs)) : (m.title || deriveTitleFromFile(f, abs));
-            const blurb = m.blurb;
-            const ext = path.extname(f).toLowerCase();
-            if (VIDEO_EXTENSIONS.has(ext)) {
-              const base = f.replace(ext, '');
-              const posterName = ['.jpg', '.jpeg', '.png', '.webp']
-                .map((e) => `${base}${e}`)
-                .find((name) => files.includes(name));
-              const poster = posterName ? `/gallery/${key}/${encodeURIComponent(posterName)}` : undefined;
-              return {
-                id: `${key}-${i}`,
-                title,
-                kind: 'video' as const,
-                src: `/gallery/${key}/${encodeURIComponent(f)}`,
-                poster,
-                blurb,
-                dateMs,
-              };
-            }
-            return {
-              id: `${key}-${i}`,
-              title,
-              kind: 'image' as const,
-              src: `/gallery/${key}/${encodeURIComponent(f)}`,
-              blurb,
-              dateMs,
-            };
-          })
-          .sort((a, b) => (b.dateMs ?? 0) - (a.dateMs ?? 0));
+              const group = acc.get(keyLabel)!;
+              group.items.push(item);
+              if (!group.blurb && item.blurb) group.blurb = item.blurb;
+              return acc;
+            }, new Map<string, GroupedItem>());
+
+          items = Array.from(grouped.values()).sort((a, b) => (b.dateMs ?? 0) - (a.dateMs ?? 0));
+        }
       } catch {
         items = [];
       }
@@ -236,5 +283,3 @@ export async function GET() {
     return NextResponse.json({ error: 'Failed to read gallery' }, { status: 500 });
   }
 }
-
-
