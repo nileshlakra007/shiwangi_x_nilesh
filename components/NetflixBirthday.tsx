@@ -7,7 +7,7 @@ type Media = { id: string; title: string; kind: 'image' | 'video'; src: string; 
 type GroupedItem = { id: string; dateLabel: string; blurb?: string; items: Media[] };
 type Row = { title: string; items: GroupedItem[] };
 type Hero = { type: 'image' | 'video'; src: string; poster?: string; fit?: 'cover' | 'contain' };
-type Selected = { item: Media; rowTitle: string; dateLabel: string } | null;
+type Selected = { group: GroupedItem; index: number; rowTitle: string } | null;
 
 function buildPlaceholderRows(): Row[] {
   return [
@@ -197,7 +197,7 @@ export default function NetflixBirthday() {
           {rows.slice(0, 1).map((row) => (
             <Row key={row.title} title={row.title}>
               {row.items.map((group) => (
-                <Card key={group.id} group={group} onSelect={(item) => setSelected({ item, rowTitle: row.title, dateLabel: group.dateLabel })} />
+                <Card key={group.id} group={group} onSelect={(index) => setSelected({ group, index, rowTitle: row.title })} />
               ))}
             </Row>
           ))}
@@ -207,7 +207,7 @@ export default function NetflixBirthday() {
           {rows.slice(1, 2).map((row) => (
             <Row key={row.title} title={row.title}>
               {row.items.map((group) => (
-                <Card key={group.id} group={group} onSelect={(item) => setSelected({ item, rowTitle: row.title, dateLabel: group.dateLabel })} />
+                <Card key={group.id} group={group} onSelect={(index) => setSelected({ group, index, rowTitle: row.title })} />
               ))}
             </Row>
           ))}
@@ -217,7 +217,7 @@ export default function NetflixBirthday() {
           {rows.slice(2, 3).map((row) => (
             <Row key={row.title} title={row.title}>
               {row.items.map((group) => (
-                <Card key={group.id} group={group} onSelect={(item) => setSelected({ item, rowTitle: row.title, dateLabel: group.dateLabel })} />
+                <Card key={group.id} group={group} onSelect={(index) => setSelected({ group, index, rowTitle: row.title })} />
               ))}
             </Row>
           ))}
@@ -227,7 +227,7 @@ export default function NetflixBirthday() {
           {rows.slice(3, 4).map((row) => (
             <Row key={row.title} title={row.title}>
               {row.items.map((group) => (
-                <Card key={group.id} group={group} onSelect={(item) => setSelected({ item, rowTitle: row.title, dateLabel: group.dateLabel })} />
+                <Card key={group.id} group={group} onSelect={(index) => setSelected({ group, index, rowTitle: row.title })} />
               ))}
             </Row>
           ))}
@@ -240,9 +240,9 @@ export default function NetflixBirthday() {
 
       {selected && (
         <DetailModal
-          item={selected.item}
+          group={selected.group}
+          startIndex={selected.index}
           rowTitle={selected.rowTitle}
-          dateLabel={selected.dateLabel}
           onClose={() => setSelected(null)}
         />)
       }
@@ -281,7 +281,7 @@ function Row({ title, children }: { title: string; children: React.ReactNode }) 
   );
 }
 
-function Card({ group, onSelect }: { group: GroupedItem; onSelect: (item: Media) => void }) {
+function Card({ group, onSelect }: { group: GroupedItem; onSelect: (index: number) => void }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const autoCycleMs = 2800;
   const slides = group.items;
@@ -297,7 +297,7 @@ function Card({ group, onSelect }: { group: GroupedItem; onSelect: (item: Media)
   const active = useMemo(() => slides[activeIndex] || slides[0], [slides, activeIndex]);
 
   function handleSelect() {
-    onSelect(active);
+    onSelect(activeIndex);
   }
 
   return (
@@ -373,29 +373,94 @@ function Slide({ item, isActive }: { item: Media; isActive: boolean }) {
   );
 }
 
-function DetailModal({ item, rowTitle, dateLabel, onClose }: { item: Media; rowTitle: string; dateLabel: string; onClose: () => void }) {
+function DetailModal({ group, startIndex, rowTitle, onClose }: { group: GroupedItem; startIndex: number; rowTitle: string; onClose: () => void }) {
+  const [activeIndex, setActiveIndex] = useState(Math.max(0, Math.min(startIndex, group.items.length - 1)));
+  const touchStartX = useRef<number | null>(null);
+  const AUTO_MS = 3200;
+
   useEffect(() => {
     const original = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = original; };
   }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setActiveIndex((prev) => (prev + 1) % group.items.length);
+    }, AUTO_MS);
+    return () => window.clearInterval(timer);
+  }, [group.items.length]);
+
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowRight') setActiveIndex((prev) => (prev + 1) % group.items.length);
+      if (e.key === 'ArrowLeft') setActiveIndex((prev) => (prev - 1 + group.items.length) % group.items.length);
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [group.items.length, onClose]);
+
+  function onTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX;
+  }
+  function onTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null) return;
+    const delta = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(delta) < 40) return;
+    if (delta < 0) {
+      setActiveIndex((prev) => (prev + 1) % group.items.length);
+    } else {
+      setActiveIndex((prev) => (prev - 1 + group.items.length) % group.items.length);
+    }
+  }
+
+  const item = group.items[activeIndex];
   return (
     <div className="fixed inset-0 z-[200]">
       <div className="absolute inset-0 bg-black/80" onClick={onClose} />
       <div className="absolute inset-0 grid place-items-center px-4">
-        <div className="w-full max-w-4xl">
+        <div className="w-full max-w-4xl" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
           <div className="relative w-full overflow-hidden rounded-lg bg-black">
-            {item.kind === 'video' ? (
-              <video
-                src={item.src}
-                poster={item.poster}
-                autoPlay
-                controls
-                playsInline
-                className="w-full h-[50vh] md:h-[60vh] object-contain bg-black"
-              />
-            ) : (
-              <img src={item.src} alt={item.title} className="w-full h-[50vh] md:h-[60vh] object-contain bg-black" />
+            {group.items.map((media, idx) => (
+              <div
+                key={media.id}
+                className={`absolute inset-0 transition-opacity duration-500 ${idx === activeIndex ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+              >
+                {media.kind === 'video' ? (
+                  <video
+                    src={media.src}
+                    poster={media.poster}
+                    autoPlay={idx === activeIndex}
+                    muted
+                    loop
+                    controls
+                    playsInline
+                    className="w-full h-[50vh] md:h-[60vh] object-contain bg-black"
+                  />
+                ) : (
+                  <img src={media.src} alt={media.title} className="w-full h-[50vh] md:h-[60vh] object-contain bg-black" />
+                )}
+              </div>
+            ))}
+            {group.items.length > 1 && (
+              <>
+                <button
+                  onClick={() => setActiveIndex((prev) => (prev - 1 + group.items.length) % group.items.length)}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white rounded-full w-10 h-10 grid place-items-center"
+                  aria-label="Previous"
+                >
+                  ‹
+                </button>
+                <button
+                  onClick={() => setActiveIndex((prev) => (prev + 1) % group.items.length)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white rounded-full w-10 h-10 grid place-items-center"
+                  aria-label="Next"
+                >
+                  ›
+                </button>
+              </>
             )}
             <button
               onClick={onClose}
@@ -407,9 +472,16 @@ function DetailModal({ item, rowTitle, dateLabel, onClose }: { item: Media; rowT
           </div>
           <div className="bg-zinc-900 text-white p-4 rounded-b-lg space-y-1">
             <div className="text-sm text-white/60">{rowTitle}</div>
-            <div className="text-xs text-white/40">{dateLabel}</div>
+            <div className="text-xs text-white/40">{group.dateLabel}</div>
             <div className="text-xl md:text-2xl font-bold">{item.title}</div>
             {item.blurb && <div className="text-white/80 text-sm md:text-base">{item.blurb}</div>}
+            {group.items.length > 1 && (
+              <div className="flex gap-1 mt-2">
+                {group.items.map((_, idx) => (
+                  <span key={idx} className={`h-1.5 w-6 rounded-full ${idx === activeIndex ? 'bg-white' : 'bg-white/30'}`} />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
